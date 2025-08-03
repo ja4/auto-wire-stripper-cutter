@@ -1,6 +1,6 @@
-#define ENCODER_DO_NOT_USE_INTERRUPTS
-#include <Encoder.h>
+// #define ENCODER_DO_NOT_USE_INTERRUPTS  // <-- This line has been removed to enable interrupts for reliability.
 
+#include <Encoder.h>
 #include <Stepper.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -17,7 +17,7 @@ const int LINMOT_STEPPERS_DIR_PIN = 18;
 const int EXTRUDER_STEPPER_STEP_PIN = 16;  // The stepper that moves the wire in the extruder.
 const int EXTRUDER_STEPPER_DIR_PIN = 17;
 
-const int ENCODER_DT_PIN = 0;
+const int ENCODER_DT_PIN = 2;
 const int ENCODER_CLK_PIN = 23;
 const int ENCODER_BTN_PIN = 4;
 
@@ -113,6 +113,9 @@ void setup() {
     pinMode(BTN2_PIN, INPUT_PULLUP);
 
     display.begin(i2c_Address, true);
+
+    pinMode(ENCODER_DT_PIN, OUTPUT); // Set GPIO2 as output if you want to control it
+    Serial.begin(115200);
 }
 
 
@@ -125,13 +128,25 @@ void loop() {
         handleOLEDDisplay();
     }
 
+    // Add this block to handle Serial input
+    if (Serial.available()) {
+        char cmd = Serial.read();
+        if (cmd == 'H') {
+            // Increment value of selected component (if not a button)
+            if (!comps[encoderPos].btn) {
+                comps[encoderPos].value++;
+                encoder.write(comps[encoderPos].value * 4); // <-- Sync encoder hardware value
+            }
+            handleOLEDDisplay(); // Update OLED when 'H' is received
+        }
+    }
+
     if (comps[START_BTN_INDEX].selected) {
         runAutoCuttingStripping();
     }
 
     encoderLastPosMain = encPos;
     encBtnPrevStateMain = encBtnState;
-
 
     if (!digitalRead(BTN1_PIN)) {
         moveBlade(1);
@@ -149,23 +164,29 @@ void handleOLEDDisplay() {
 
     boolean btnState = digitalRead(ENCODER_BTN_PIN);
 
-    // Handling whether encoder is changing cell or value of the cell.
+    if (!comps[encoderPos].btn) {
+        int newEncPos = getEncoderPos();
+        Serial.print("newEncPos: "); Serial.println(newEncPos);
+        Serial.print("comps[encoderPos].value: "); Serial.println(comps[encoderPos].value); // <-- Add this line
+        if (newEncPos != comps[encoderPos].value) {
+            comps[encoderPos].value = newEncPos;
+        }
+    }
+
+            // On button press, jump to next cell
     if (!btnState && (btnState != encBtnPrevState)) {
-        encBtnState = !encBtnState;
-
-        if (encBtnState) {
-            encoderLastPos = encoderPos;
-        }
-        else {
-            encoder.write(encoderLastPos * 4);
-        }
+        encoderPos = (encoderPos + 1) % numOfComps;
+        // Set encoder to current value of new cell
+        encoder.write(comps[encoderPos].value * 4);
     }
-
     encBtnPrevState = btnState;
+    
 
-    if (!encBtnState) {
-        encoderPos = getEncoderPos();
-    }
+
+   
+
+    // Only update value if not on button cell
+    
 
     handleAllComponents();
 
@@ -186,24 +207,8 @@ void handleAllComponents() {
 
         if (encoderPos == i) {
             comp.highlighted = true;
-
-            if (encBtnState) {
-                if (!comp.selected && !comp.btn) {
-                    encoder.write(comp.value * 4);
-                }
-
-                comp.selected = true;
-
-                int newEncPos = getEncoderPos();
-                comp.value = newEncPos;
-
-            }
-            else {
-                comp.selected = false;
-            }
-
-        }
-        else {
+            comp.selected = true;
+        } else {
             comp.highlighted = false;
             comp.selected = false;
         }
@@ -294,6 +299,8 @@ void moveWire(int steps) {
 
 
 int getEncoderPos() {
-    int encPos = encoder.read() / 4;
-    return encPos;
+    // Reading the encoder value and dividing by 4 is standard practice,
+    // as quadrature encoders have 4 states per detent (click).
+    int newPos = encoder.read();
+    return newPos;
 }
