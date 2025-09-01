@@ -29,8 +29,8 @@ const int BTN2_PIN = 26;
 const int LINMOT_STEPPERS_STEPS = 1;  // Steppers step(s) movement at a time.
 const int EXTRUDER_STEPPER_STEPS = 1;
 
-const int LINMOT_STEPPERS_SPEED = 2000;
-const int EXTRUDER_STEPPER_SPEED = 2000;
+const int LINMOT_STEPPERS_SPEED = 200;
+const int EXTRUDER_STEPPER_SPEED = 200;
 
 
 const int SCREEN_WIDTH = 128;  // OLED display width, in pixels
@@ -64,6 +64,7 @@ const boolean CALIBRATION_MODE = false;
 
 Stepper linMotSteppers(200, LINMOT_STEPPERS_DIR_PIN, LINMOT_STEPPERS_STEP_PIN);
 Stepper extruderStepper(200, EXTRUDER_STEPPER_DIR_PIN, EXTRUDER_STEPPER_STEP_PIN);
+
 
 Encoder encoder(ENCODER_DT_PIN, ENCODER_CLK_PIN);
 
@@ -131,18 +132,46 @@ void loop() {
     // Add this block to handle Serial input
     if (Serial.available()) {
         char cmd = Serial.read();
-        if (cmd == 'H') {
+        if (cmd == 'h') {
             // Increment value of selected component (if not a button)
             if (!comps[encoderPos].btn) {
-                comps[encoderPos].value++;
-                encoder.write(comps[encoderPos].value * 4); // <-- Sync encoder hardware value
-            }
+                //comps[encoderPos].value++;
+                encoder.write(comps[encoderPos].value + 1); // <-- Sync encoder hardware value
+            } 
+
+
+
             handleOLEDDisplay(); // Update OLED when 'H' is received
+        }
+        if (cmd == 'g') {
+            // Increment value of selected component (if not a button)
+            if (!comps[encoderPos].btn) {
+                //comps[encoderPos].value++;
+                encoder.write(comps[encoderPos].value - 1); // <-- Sync encoder hardware value
+            } 
+
+
+
+            handleOLEDDisplay(); // Update OLED when 'H' is received
+        }
+        if (cmd == 'f') {
+            // Increment value of selected component (if not a button)
+            encoderPos = (encoderPos + 1) % numOfComps;
+            encoder.write(comps[encoderPos].value);
+
+
+
+            handleOLEDDisplay(); // Update OLED when 'H' is received
+        }
+        if (cmd == 's') {
+          
+           runAutoCuttingStripping();
         }
     }
 
     if (comps[START_BTN_INDEX].selected) {
         runAutoCuttingStripping();
+        
     }
 
     encoderLastPosMain = encPos;
@@ -166,8 +195,8 @@ void handleOLEDDisplay() {
 
     if (!comps[encoderPos].btn) {
         int newEncPos = getEncoderPos();
-        Serial.print("newEncPos: "); Serial.println(newEncPos);
-        Serial.print("comps[encoderPos].value: "); Serial.println(comps[encoderPos].value); // <-- Add this line
+        //Serial.print("newEncPos: "); Serial.println(newEncPos);
+        //Serial.print("comps[encoderPos].value: "); Serial.println(comps[encoderPos].value); // <-- Add this line
         if (newEncPos != comps[encoderPos].value) {
             comps[encoderPos].value = newEncPos;
         }
@@ -251,11 +280,14 @@ void drawText(String text, int x, int y) {
 
 
 void runAutoCuttingStripping() {
+
     if (CALIBRATION_MODE) {
+        Serial.print("Calibration mode");
         moveWire(comps[STRIPPING_LENGTH1_INDEX].value);
         cut();
     }
     else {
+        Serial.print("Running mode"); 
         cut();
         delay(DELAY_BETWEEN_CUTS);
 
